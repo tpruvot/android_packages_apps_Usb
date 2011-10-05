@@ -9,6 +9,7 @@
     <application android:label="usb" android:persistent="true">
         <activity android:theme="@style/UsbDialog" android:name="UsbModeSelectionActivity" android:excludeFromRecents="true" />
         <activity android:theme="@style/UsbDialog" android:name="UsbErrorActivity" />
+        <activity android:theme="@style/UsbDialog" android:name="UsbHostActivity" />
         <service android:name="UsbService" android:process="com.motorola.usb">
             <intent-filter>
                 <action android:name="com.motorola.intent.action.USB_LAUNCH_USBSERVICE" />

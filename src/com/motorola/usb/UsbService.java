@@ -60,6 +60,8 @@ public class UsbService extends Service
             "com.motorola.intent.action.USB_LAUNCH_USBSERVICE";
     public static final String ACTION_MODE_SWITCH_FROM_UI =
             "com.motorola.intent.action.USB_MODE_SWITCH_FROM_UI";
+    public static final String ACTION_MODE_SWITCH_CONFIRM =
+            "com.motorola.intent.action.USB_MODE_SWITCH_CONFIRM";
     public static final String ACTION_MODE_SWITCH_FROM_ATCMD =
             "com.motorola.intent.action.USB_MODE_SWITCH_FROM_ATCMD";
     public static final String ACTION_TETHERING_TOGGLED =
@@ -80,8 +82,12 @@ public class UsbService extends Service
             "com.motorola.intent.action.USB_MTP_CONNECTION";
     public static final String ACTION_LAUNCH_ATCMD =
             "com.motorola.intent.action.USB_ATCMD_SERVICE_START";
+    public static final String ACTION_START_HID =
+            "com.motorola.intent.action.USB_HID_START";
+    public static final String ACTION_STOP_HID =
+            "com.motorola.intent.action.USB_HID_STOP";
     private static final String ACTION_STOP_ATCMD =
-        "com.motorola.intent.action.USB_ATCMD_SERVICE_STOP_OR_CLOSEDEV";
+            "com.motorola.intent.action.USB_ATCMD_SERVICE_STOP_OR_CLOSEDEV";
     public static final String ACTION_LAUNCH_RNDIS =
             "com.motorola.intent.action.USB_RNDIS_CONNECTION";
     private static final String ACTION_ENTER_MSC =
@@ -126,6 +132,7 @@ public class UsbService extends Service
      * usb_mode_rndis          16 22b8:41e4 rndis
      * usb_mode_modem          11 22b8:6422 acm
      * usb_mode_charge_only    14 22b8:4287 charge_only
+     * usb_mode_hid             5 *                          return usb_mode_hid:ok
      *
      * To get more informations on supported kernel usb modes, these modes are not exactly same as supported usbd ones :
      * https://www.gitorious.org/android_kernel_omap/android_kernel_omap/blobs/motorola_342_145_r1561/drivers/usb/gadget/mot_android.c#line87
@@ -151,6 +158,7 @@ public class UsbService extends Service
     public static final int USB_MODE_RNDIS = 3;
     public static final int USB_MODE_MODEM = 4;
     public static final int USB_MODE_NONE = 5;
+    public static final int USB_MODE_HID = 6;
 
     static {
         sModes.put(USB_MODE_NGP, new ModeInfo(
@@ -166,6 +174,9 @@ public class UsbService extends Service
                     "Phone as Modem", UsbListener.MODE_MODEM, UsbListener.MODE_MODEM));
         sModes.put(USB_MODE_NONE, new ModeInfo(
                     "None", UsbListener.MODE_CHARGE, UsbListener.MODE_CHARGE_ADB));
+        /* Host mode */
+        sModes.put(USB_MODE_HID, new ModeInfo(
+                    "HID", UsbListener.MODE_HID, UsbListener.MODE_HID));
     }
 
     /* states */
@@ -287,6 +298,10 @@ public class UsbService extends Service
                 int index = intent.getIntExtra(EXTRA_MODE_SWITCH_MODE, -1);
                 Log.d(TAG, "onReceive(USB_MODE_SWITCH_FROM_UI) mode=" + index);
                 setUsbModeFromUI(index);
+            } else if (action.equals(ACTION_MODE_SWITCH_CONFIRM)) {
+                int index = intent.getIntExtra(EXTRA_MODE_SWITCH_MODE, -1);
+                Log.d(TAG, "onReceive(USB_MODE_SWITCH_CONFIRM) mode=" + index);
+                setUsbModeFromConfirm(index);
             } else if (action.equals(ACTION_MODE_SWITCH_FROM_ATCMD)) {
                 int index = intent.getIntExtra(EXTRA_MODE_SWITCH_MODE, -1);
                 Log.d(TAG, "onReceive(USB_MODE_SWITCH_FROM_ATCMD) mode=" + index);
@@ -364,6 +379,7 @@ public class UsbService extends Service
         intentFilter.addAction(ACTION_MTP_CLOSED);
         intentFilter.addAction(ACTION_RNDIS_CLOSED);
         intentFilter.addAction(ACTION_MODE_SWITCH_FROM_UI);
+        intentFilter.addAction(ACTION_MODE_SWITCH_CONFIRM);
         intentFilter.addAction(ACTION_MODE_SWITCH_FROM_ATCMD);
         intentFilter.addAction(ACTION_TETHERING_TOGGLED);
         registerReceiver(mUsbServiceReceiver, intentFilter);
@@ -417,6 +433,11 @@ public class UsbService extends Service
 
         int currentMode = getCurrentUsbMode();
 
+        // In USB Host mode, Notification should stay visible
+        if (currentMode == USB_MODE_HID) {
+            setUsbConnectionNotificationVisibility(true, false);
+        }
+
         switch (mUsbState) {
             case USB_STATE_IDLE:
                 if (event == EVENT_CABLE_INSERTED) {
@@ -435,7 +456,7 @@ public class UsbService extends Service
                         usbModeSwitchFail();
                     }
 
-                    mUsbListener.sendUsbModeSwitchCmd(UsbListener.CMD_UNLOAD_DRIVER);
+//                    mUsbListener.sendUsbModeSwitchCmd(UsbListener.CMD_UNLOAD_DRIVER);
                     mUsbState = USB_STATE_IDLE;
                     mIsSwitchFrom = USB_SWITCH_FROM_IDLE;
                 } else if (event == EVENT_ENUMERATION_OK) {
@@ -511,7 +532,7 @@ public class UsbService extends Service
                 if (event == EVENT_CABLE_INSERTED) {
                     mUsbState = USB_STATE_ATTACH_DEVNOD_CLOSE;
                 } else if (event == EVENT_DEVNODE_CLOSED) {
-                    mUsbListener.sendUsbModeSwitchCmd(UsbListener.CMD_UNLOAD_DRIVER);
+//                    mUsbListener.sendUsbModeSwitchCmd(UsbListener.CMD_UNLOAD_DRIVER);
                     mUsbState = USB_STATE_IDLE;
                     mIsSwitchFrom = USB_SWITCH_FROM_IDLE;
                 }
@@ -558,6 +579,11 @@ public class UsbService extends Service
                 stopAtCmdService();
                 break;
 
+            case USB_MODE_HID:
+                stopHidService();
+                handleUsbEvent(EVENT_DEVNODE_CLOSED);
+                break;
+
             default:
                 handleUsbEvent(EVENT_DEVNODE_CLOSED);
                 break;
@@ -588,6 +614,10 @@ public class UsbService extends Service
             case USB_MODE_MODEM:
                 startAtCmdService();
                 break;
+
+            case USB_MODE_HID:
+                startHidService();
+                break;
         }
     }
 
@@ -604,6 +634,17 @@ public class UsbService extends Service
     private void stopAtCmdService() {
         Log.d(TAG, "stopAtCmdService()");
         sendBroadcast(new Intent(ACTION_STOP_ATCMD));
+    }
+
+    private void startHidService() {
+        sendUsblanDownIntent();
+        Log.d(TAG, "startHidService()");
+        sendBroadcast(new Intent(ACTION_START_HID));
+    }
+
+    private void stopHidService() {
+        Log.d(TAG, "stopHidService()");
+        sendBroadcast(new Intent(ACTION_STOP_HID));
     }
 
     private void startMtpService() {
@@ -764,6 +805,7 @@ public class UsbService extends Service
             case USB_MODE_RNDIS: return R.string.usb_mode_rndis;
             case USB_MODE_MODEM: return R.string.usb_mode_modem;
             case USB_MODE_NONE: return R.string.usb_mode_none;
+            case USB_MODE_HID: return R.string.usb_mode_hid;
         }
 
         return -1;
@@ -823,9 +865,13 @@ public class UsbService extends Service
 
             mNotification.tickerText = getString(R.string.usb_selection_notification_title);
 
-            int messageRes = getCurrentUsbMode() == USB_MODE_MODEM
-                    ? R.string.usb_selection_notification_message_for_modem
-                    : R.string.usb_selection_notification_message;
+            int messageRes = R.string.usb_selection_notification_message;
+
+            int mode = getCurrentUsbMode();
+            if (mode == USB_MODE_MODEM)
+                messageRes = R.string.usb_selection_notification_message_for_modem;
+            else if (mode == USB_MODE_HID)
+                messageRes = R.string.usb_selection_notification_message; //todo
 
             mNotification.setLatestEventInfo(this,
                         getString(R.string.usb_selection_notification_title),
@@ -918,10 +964,31 @@ public class UsbService extends Service
         mConnectedToast.show();
     }
 
+    private void showConfirmDialog() {
+
+        Log.d(TAG, "showConfirmDialog()");
+
+        Intent intent = new Intent(Intent.ACTION_MAIN);
+        intent.addCategory(Intent.CATEGORY_LAUNCHER);
+        intent.setFlags(Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED | Intent.FLAG_ACTIVITY_NEW_TASK);
+        intent.setClass(this, UsbHostActivity.class);
+
+        int resId = getStringResForMode(mNewUsbMode);
+        if (resId >= 0) {
+            intent.putExtra(EXTRA_ERROR_MODE_STRING, getString(resId));
+        }
+        startActivity(intent);
+    }
+
     private void setUsbModeFromUI(int mode) {
         Log.d(TAG, "setUsbModeFromUI(" + getUsbModeString(mode) + ")");
 
         mNewUsbMode = mode;
+
+        if (mNewUsbMode == USB_MODE_HID) {
+            showConfirmDialog();
+            return;
+        }
 
         if (mUsbState == USB_STATE_SERVICE_STARTUP) {
             mIsSwitchFrom = USB_SWITCH_FROM_UI;
@@ -931,6 +998,15 @@ public class UsbService extends Service
             Log.d(TAG, "will show error dialog");
             usbModeSwitchFail();
         }
+    }
+
+    private void setUsbModeFromConfirm(int mode) {
+        Log.d(TAG, "setUsbModeFromConfirm(" + getUsbModeString(mode) + ")");
+
+        mNewUsbMode = mode;
+
+        mIsSwitchFrom = USB_SWITCH_FROM_UI;
+        handleUsbEvent(EVENT_SWITCH);
     }
 
     public void handleAdbStateChange(boolean enable) {
@@ -988,6 +1064,7 @@ public class UsbService extends Service
             case USB_MODE_MODEM:
                 processEvent = event.equals(UsbListener.EVENT_START_MODEM) ||
                                event.equals(UsbListener.EVENT_START_ACM);
+            case USB_MODE_HID:
                 break;
         }
         if (processEvent) {
@@ -1000,11 +1077,19 @@ public class UsbService extends Service
 
         if (mUsbCableAttached) {
             mUsbCableAttached = false;
-            setUsbConnectionNotificationVisibility(false, false);
-            enableInternalDataConnectivity(true);
-            sendBroadcast(new Intent(ACTION_CABLE_DETACHED));
-            emitReconfigurationIntent(false);
-            updateUsbStateFile(false, -1);
+            if (getCurrentUsbMode() != USB_MODE_HID) {
+                setUsbConnectionNotificationVisibility(false, false);
+                enableInternalDataConnectivity(true);
+                sendBroadcast(new Intent(ACTION_CABLE_DETACHED));
+                emitReconfigurationIntent(false);
+                updateUsbStateFile(false, -1);
+            }
+            else {
+                // simulate a cable connected in host-mode
+                enableInternalDataConnectivity(true);
+                emitReconfigurationIntent(true);
+                updateUsbStateFile(true, getCurrentUsbMode());
+            }
         }
 
         handleUsbEvent(EVENT_CABLE_REMOVED);
@@ -1029,6 +1114,8 @@ public class UsbService extends Service
             newUsbMode = USB_MODE_RNDIS;
         } else if (message.equals(UsbListener.EVENT_REQ_NONE)) {
             newUsbMode = USB_MODE_NONE;
+        } else if (message.equals(UsbListener.EVENT_REQ_HID)) {
+            newUsbMode = USB_MODE_HID;
         }
 
         mIsSwitchFrom = USB_SWITCH_FROM_USBD;

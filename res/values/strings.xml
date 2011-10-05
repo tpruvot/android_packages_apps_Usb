@@ -13,7 +13,10 @@
     <string name="usb_mode_rndis">USB Networking</string>
     <string name="usb_mode_modem">Phone as Modem</string>
     <string name="usb_mode_none">Charge Only</string>
+    <string name="usb_mode_hid">HID (Host mode)</string>
     <string name="usb_error_message">The USB connection cannot be changed to %s.</string>
     <string name="preparing_ums">Preparing SD card.</string>
     <string name="ums_ready">The SD card is now shared via USB.</string>
+    <string name="host_confirm_switch">Please disconnect USB cable to allow USB-Host mode.</string>
+    <string name="host_confirm_title">USB-Host</string>
 </resources>

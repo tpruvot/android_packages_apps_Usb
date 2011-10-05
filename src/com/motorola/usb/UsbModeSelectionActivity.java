@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2011 Skrilax_CZ
+ * Copyright (C) 2011 Skrilax_CZ & CyanogenDefy
  * Based on Motorola Usb.apk
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
@@ -81,7 +81,8 @@ public class UsbModeSelectionActivity extends AlertActivity
         Log.d(TAG, "onClick() --  " + String.valueOf(which));
 
         if (which == AlertDialog.BUTTON_POSITIVE) {
-            if (currentUsbModeIndex != previousUsbModeIndex) {
+            if (currentUsbModeIndex != previousUsbModeIndex || currentUsbModeIndex == UsbService.USB_MODE_HID) {
+
                 Intent intent = new Intent(UsbService.ACTION_MODE_SWITCH_FROM_UI);
                 intent.putExtra(UsbService.EXTRA_MODE_SWITCH_MODE, currentUsbModeIndex);
                 sendBroadcast(intent);
@@ -104,6 +105,7 @@ public class UsbModeSelectionActivity extends AlertActivity
         return false;
     }
 
+    @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
@@ -138,9 +140,10 @@ public class UsbModeSelectionActivity extends AlertActivity
         registerReceiver(mUsbModeSwitchReceiver, new IntentFilter(UsbService.ACTION_CABLE_DETACHED));
     }
 
+    @Override
     protected void onDestroy()
     {
-        super.onDestroy();
         unregisterReceiver(mUsbModeSwitchReceiver);
+        super.onDestroy();
     }
 }

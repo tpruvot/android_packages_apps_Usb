@@ -48,6 +48,7 @@ public final class UsbListener implements Runnable
     public static final String EVENT_GET_DESCRIPTOR = "get_descriptor";
     public static final String EVENT_ADB_ON = "usbd_adb_status_on";
     public static final String EVENT_ADB_OFF = "usbd_adb_status_off";
+
     public static final String EVENT_START_NGP = "usbd_start_ngp";
     public static final String EVENT_START_MTP = "usbd_start_ngp";
     public static final String EVENT_START_MSC = "usbd_start_msc_mount";
@@ -55,13 +56,16 @@ public final class UsbListener implements Runnable
     public static final String EVENT_START_MODEM = "usbd_start_modem";
     public static final String EVENT_START_RNDIS = "usbd_start_rndis";
     private static final String EVENT_START_PREFIX = "usbd_start_";
+
     public static final String EVENT_REQ_NGP = "usbd_req_switch_ngp";
     public static final String EVENT_REQ_MTP = "usbd_req_switch_mtp";
     public static final String EVENT_REQ_MSC = "usbd_req_switch_msc";
     public static final String EVENT_REQ_ACM = "usbd_req_switch_acm";
+    public static final String EVENT_REQ_HID = "usbd_req_switch_hid";
     public static final String EVENT_REQ_MODEM = "usbd_req_switch_modem";
     public static final String EVENT_REQ_RNDIS = "usbd_req_switch_rndis";
     public static final String EVENT_REQ_NONE = "usbd_req_switch_none";
+
     private static final String EVENT_REQ_PREFIX = "usbd_req_switch_";
     private static final String SWITCH_OK_POSTFIX = ":ok";
     private static final String SWITCH_FAIL_POSTFIX = ":fail";
@@ -74,6 +78,7 @@ public final class UsbListener implements Runnable
     public static final String MODE_NGP = "usb_mode_ngp";
     public static final String MODE_MTP = "usb_mode_mtp";
     public static final String MODE_MSC = "usb_mode_msc";
+    public static final String MODE_HID = "usb_mode_hid";
     public static final String MODE_RNDIS = "usb_mode_rndis";
     public static final String MODE_MODEM = "usb_mode_modem";
     public static final String MODE_CHARGE = "usb_mode_charge_only";
