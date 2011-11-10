@@ -43,6 +43,7 @@ import android.widget.Toast;
 import com.android.internal.telephony.ITelephony;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.HashMap;
@@ -377,11 +378,6 @@ public class UsbService extends Service
             mModeSelectionIntent = PendingIntent.getActivity(this, 0, intent, 0);
         }
 
-        String stateFileName = getResources().getString(R.string.current_usb_state_file_name);
-        if (stateFileName != null && !stateFileName.isEmpty()) {
-            mCurrentStateFile = new File(stateFileName);
-        }
-
         mPhoneService = ITelephony.Stub.asInterface(ServiceManager.getService(TELEPHONY_SERVICE));
         mStorageManager = (StorageManager) getSystemService(STORAGE_SERVICE);
         mNotifManager = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
@@ -395,6 +391,15 @@ public class UsbService extends Service
         mUsbListener = new UsbListener(mHandler);
         new Thread(mUsbListener, UsbListener.class.getName()).start();
         mUEventObserver.startObserving("DEVPATH=/devices/virtual/misc/usbnet_enable");
+
+        String stateFileName = getResources().getString(R.string.current_usb_state_file_name);
+        if (stateFileName != null && !stateFileName.isEmpty()) {
+            mCurrentStateFile = new File(stateFileName);
+            String state = readUsbStateFile();
+            if (!state.isEmpty()) {
+                setInitialModeFromState(state);
+            }
+        }
     }
 
     @Override
@@ -1063,8 +1068,52 @@ public class UsbService extends Service
                 Log.e(TAG, "Found invalid mode override value " + modes[i] + ", ignoring.");
                 continue;
             }
-            info.mode = modeValues[i];
-            info.adbMode = adbModeValues[i];
+            info.mode = modeValues[i].trim();
+            info.adbMode = adbModeValues[i].trim();
+        }
+    }
+
+    private String readUsbStateFile() {
+        String state="";
+        if (mCurrentStateFile == null) {
+            return state;
+        }
+        FileInputStream in = null;
+        try {
+            in = new FileInputStream(mCurrentStateFile);
+            byte[] buffer = new byte[32];
+            int bytesRead;
+            while ((bytesRead = in.read(buffer)) > 0) {
+                state += new String(buffer);
+            }
+            in.close();
+        } catch (Exception e) {
+            Log.w(TAG, "Could not read current state file", e);
+        }
+        return state.trim();
+    }
+
+    private void setInitialModeFromState(String state) {
+        int mode = -1;
+        if (!state.isEmpty()) {
+            for (int i = 0; i < sModes.size(); i++) {
+                ModeInfo info = sModes.get(i);
+                if (info == null) {
+                    continue;
+                }
+                if (state.equals(info.adbMode) || state.equals(info.mode)) {
+                    mode = i;
+                    mADBEnabled = state.equals(info.adbMode);
+                    break;
+                }
+            }
+        }
+        if (mode != -1) {
+            Log.d(TAG, "Initial mode read from state file=" + state);
+            UsbSettings.writeMode(UsbService.this, mode, false);
+            handleUsbEvent(EVENT_CABLE_INSERTED);
+        } else {
+            Log.e(TAG, "No valid entry for state " + state);
         }
     }
 }
