@@ -37,6 +37,7 @@ import android.os.SystemClock;
 import android.os.UEventObserver;
 import android.os.storage.StorageEventListener;
 import android.os.storage.StorageManager;
+import android.text.TextUtils;
 import android.util.Log;
 import android.widget.Toast;
 
@@ -393,7 +394,7 @@ public class UsbService extends Service
         mUEventObserver.startObserving("DEVPATH=/devices/virtual/misc/usbnet_enable");
 
         String stateFileName = getResources().getString(R.string.current_usb_state_file_name);
-        if (stateFileName != null && !stateFileName.isEmpty()) {
+        if (!TextUtils.isEmpty(stateFileName)) {
             mCurrentStateFile = new File(stateFileName);
             String state = readUsbStateFile();
             if (!state.isEmpty()) {
